@@ -2,10 +2,33 @@ import cv2
 import mediapipe as mp
 import imutils
 import math
+from flask import Flask, jsonify
+from multiprocessing import Process
+import json
+
+
+app = Flask(__name__)
+
+center_pt = None
+dist_from_cam = None
+
+cap = cv2.VideoCapture(0)
+
+@app.route('/GET_COORDS', methods=['POST'])
+def GET_COORDS():
+    global center_pt
+    global dist_from_cam
+      
+    return jsonify({
+        "center": center_pt,
+        "dist": dist_from_cam
+    })
 
 handSolution = mp.solutions.hands # Model of hands
 hands = handSolution.Hands(max_num_hands=1) 
 draw = mp.solutions.drawing_utils # Get landmark points put on display
+
+
 
 def pr_image(img):
     '''
@@ -18,7 +41,7 @@ def pr_image(img):
 def disp_marks(img, res):
     '''
         Function that modifies cv2 image input
-        by drawing on each landmark using MediaPipe.
+        by drawing on each landmark using Medianp.pipe.
         Returns coordinate of center point under middle
         finger.
     '''
@@ -41,7 +64,7 @@ def disp_marks(img, res):
 
 def calc_len(pt1, pt2):
     '''
-        A function that returns the length in pixels between two given points,
+        A function that returns the length in np.pixels between two given points,
         which are given as [x, y]
     '''
 
@@ -66,7 +89,7 @@ def calc_focal_len(hand_len, dist=5.78, irl_width=3.5):
         of my hand being 3.5 inches wide, 
         and the distance (using an iPhone 12 to approximate).
 
-        I can then  use the ratio of that to the width in pixels, which
+        I can then  use the ratio of that to the width in np.pixels, which
         gives F.
     '''
     F = (hand_len * dist) / irl_width
@@ -91,37 +114,67 @@ def calc_center(pt1, pt2):
         return [int((pt1[0] + pt2[0]) / 2), int((pt1[1] + pt2[1]) / 2)]
     except:
         return False
-
-cap = cv2.VideoCapture(0)
-while True:
-    succ, image = cap.read()
-
-    if not succ:
-        continue
-
-    image = imutils.resize(image, width=600, height=600)
-
-    image = cv2.flip(image, 1)
-    res = pr_image(image)
-    pts = disp_marks(image, res)
-
-    hand_len = calc_len(pts[0], pts[1])
     
-    dist_from_cam = int(calc_approx_dist(hand_len=hand_len) * 25.4)
+
+def data_loop():
+    while True:
+
+        succ, image = cap.read()
+
+        if not succ:
+            continue
+
+        image = imutils.resize(image, width=600, height=600)
+
+        # image = cv2.flip(image, 1)
+        res = pr_image(image)
+        pts = disp_marks(image, res)
+
+        hand_len = calc_len(pts[0], pts[1])
+
+        global dist_from_cam
+
+        global center_pt
+        
+        dist_from_cam = int(calc_approx_dist(hand_len=hand_len) * 25.4)
+        
+        center_pt = calc_center(pts[0], pts[1])
+
+        print(dist_from_cam)
+
+        if center_pt and dist_from_cam > 0:
+
+            dictionary = {
+                "dist": dist_from_cam,
+                "center": center_pt
+            }
+
+            json_object = json.dumps(dictionary, indent=4)
     
-    center_pt = calc_center(pts[0], pts[1])
+            # Writing to sample.json
+            with open("coord.json", "w") as outfile:
+                outfile.write(json_object)
+        
+        # try:
+        #     cv2.circle(image, (center_pt[0], center_pt[1]), 10, (255, 0, 0), -dist_from_cam)
+        #     image = cv2.putText(image, f'({center_pt[0]}, {center_pt[1]}, {dist_from_cam})', (center_pt[0], center_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 
+        #                1, (0, 255, 0), 1, cv2.LINE_AA)
+            
+        # except Exception as e:
+        #     pass
 
-    try:
-        cv2.circle(image, (center_pt[0], center_pt[1]), 10, (255, 0, 0), -dist_from_cam)
-        image = cv2.putText(image, f'({center_pt[0]}, {center_pt[1]}, {dist_from_cam})', (center_pt[0], center_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 
-                   1, (0, 255, 0), 1, cv2.LINE_AA)
-    except Exception as e:
-        pass
+        # cv2.imshow("View Tracking", image)
 
-    cv2.imshow("View Tracking", image)
+        
 
 
-    if cv2.waitKey(1) == ord('q'):
-        cap.release()
-        cv2.destroyAllWindows()
+        # if cv2.waitKey(1) == ord('q'):
+        #     cap.release()
+        #     cv2.destroyAllWindows()
 
+
+if __name__ == "__main__":
+    p = Process(target=data_loop)
+    p.start()  
+    app.run(port=8000)
+    p.join()
