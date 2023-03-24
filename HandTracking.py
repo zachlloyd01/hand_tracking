@@ -2,27 +2,12 @@ import cv2
 import mediapipe as mp
 import imutils
 import math
-from flask import Flask, jsonify
-from multiprocessing import Process
 import json
-
-
-app = Flask(__name__)
 
 center_pt = None
 dist_from_cam = None
 
 cap = cv2.VideoCapture(0)
-
-@app.route('/GET_COORDS', methods=['POST'])
-def GET_COORDS():
-    global center_pt
-    global dist_from_cam
-      
-    return jsonify({
-        "center": center_pt,
-        "dist": dist_from_cam
-    })
 
 handSolution = mp.solutions.hands # Model of hands
 hands = handSolution.Hands(max_num_hands=1) 
@@ -140,7 +125,7 @@ def data_loop():
         
         center_pt = calc_center(pts[0], pts[1])
 
-        print(dist_from_cam)
+        # print(dist_from_cam)
 
         if center_pt and dist_from_cam > 0:
 
@@ -155,26 +140,22 @@ def data_loop():
             with open("coord.json", "w") as outfile:
                 outfile.write(json_object)
         
-        # try:
-        #     cv2.circle(image, (center_pt[0], center_pt[1]), 10, (255, 0, 0), -dist_from_cam)
-        #     image = cv2.putText(image, f'({center_pt[0]}, {center_pt[1]}, {dist_from_cam})', (center_pt[0], center_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 
-        #                1, (0, 255, 0), 1, cv2.LINE_AA)
+        try:
+            cv2.circle(image, (center_pt[0], center_pt[1]), 10, (255, 0, 0), -dist_from_cam)
+            image = cv2.putText(image, f'({center_pt[0]}, {center_pt[1]}, {dist_from_cam})', (center_pt[0], center_pt[1]), cv2.FONT_HERSHEY_SIMPLEX, 
+                       1, (0, 255, 0), 1, cv2.LINE_AA)
             
-        # except Exception as e:
-        #     pass
+        except Exception as e:
+            # print(e)
+            pass
 
-        # cv2.imshow("View Tracking", image)
+        cv2.imshow("View Tracking", image)
 
         
 
 
-        # if cv2.waitKey(1) == ord('q'):
-        #     cap.release()
-        #     cv2.destroyAllWindows()
+        if cv2.waitKey(1) == ord('q'):
+            cap.release()
+            cv2.destroyAllWindows()
 
-
-if __name__ == "__main__":
-    p = Process(target=data_loop)
-    p.start()  
-    app.run(port=8000)
-    p.join()
+data_loop() 
